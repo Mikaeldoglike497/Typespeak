@@ -2,7 +2,7 @@
 name = "typespeak"
 version = "0.1.0"
 description = "Lebanese-first bilingual voice typing for Windows"
-authors = ["TypeSpeak"]
+authors = ["NABILNET.AI"]
 edition = "2021"
 
 [lib]

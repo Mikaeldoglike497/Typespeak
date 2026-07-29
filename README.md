@@ -2,6 +2,8 @@
 
 Open-source, Windows-first, local-first Lebanese Arabic and English voice typing.
 
+Developed by [NABILNET.AI](https://nabilnet.ai).
+
 TypeSpeak records a short utterance, converts it to a 16 kHz mono WAV, routes it to the model assigned to **Arabic**, **English**, or **Mixed**, optionally translates the result locally, and can paste the final text into the Windows field that was active when recording started.
 
 The local paths use `whisper.cpp` and the bundled CrispASR runtime. Optional model connections can point to an OpenAI-compatible transcription endpoint running on `localhost` or to a cloud API. Cloud use is explicit and the UI warns when the selected route uploads audio.
@@ -34,6 +36,7 @@ Selecting an uninstalled catalog model asks for confirmation, downloads it, show
 
 | Model | Download | Primary role |
 |---|---:|---|
+| Whisper large-v3-turbo Q5_0 | 574 MB | Default multilingual Arabic and English model |
 | Cohere Transcribe Arabic Q4_K | 1.51 GB | Strong Arabic, Lebanese/Levantine, and Arabic-English code-switch candidate |
 | Qwen3-ASR 0.6B Q4_K | 631 MB | Lightweight multilingual model with language detection |
 | OmniASR CTC 300M Q4_K | 204 MB | Smallest managed multilingual download |
@@ -47,6 +50,7 @@ The default is **Whisper large-v3-turbo Q5_0**:
 
 - Multilingual Arabic and English recognition with automatic language detection.
 - Practical 574 MB quantized model for Windows CPU inference.
+- Downloaded on demand to `%LOCALAPPDATA%\TypeSpeak\models`; it is never bundled inside a production installer.
 - One runtime family for the future Windows, Android, and iOS versions.
 - Personal dictionary terms are supplied as an initial decoding prompt.
 
@@ -57,6 +61,7 @@ The higher-accuracy `large-v3 Q5_0` model can be tested later on powerful PCs, b
 - Hold-only global push-to-talk with a user-configurable shortcut (`Ctrl+Alt+Space` by default).
 - Single-key shortcuts including `Ins`, `Prt Scr`, F1–F24, navigation, numpad, volume, and media buttons.
 - Quick taps retain the selected button's normal Windows action; holding for 280 ms starts dictation.
+- No speech-model weights in either installer. Download only the models you choose from TypeSpeak.
 - A click-through, microphone-reactive listening pill at the bottom of the active screen.
 - Microphone capture and local 16 kHz PCM WAV encoding.
 - Explicit **Arabic**, **English**, and **Mixed** modes.
@@ -114,10 +119,10 @@ The network is only needed for the one-time model installations. Dictation and t
 
 ## Install the Windows app
 
-The production build bundles the CPU runtime, NVIDIA CUDA runtime, and default Whisper model. Install either artifact like a normal Windows app:
+The production build bundles the CPU and NVIDIA CUDA runtimes, but **no speech-model weights**. Install either artifact like a normal Windows app:
 
-- `TypeSpeak_0.1.0_x64-setup.exe` — recommended per-user installer.
-- `TypeSpeak_0.1.0_x64_en-US.msi` — Windows Installer package.
+- `TypeSpeak_0.1.0_x64-setup.exe` — recommended per-user installer. It asks whether to download the 574 MB default Whisper model now. Choosing **Yes** opens TypeSpeak and displays the download progress; choosing **No** keeps the installer lightweight and leaves a **Download** button beside Whisper inside the app.
+- `TypeSpeak_0.1.0_x64_en-US.msi` — Windows Installer package for managed deployment. It includes no speech models; use the in-app **Download** button after deployment.
 
 Closing the window hides TypeSpeak in the Windows system tray and keeps the global shortcut active. Use the tray menu to open Dictate, Recent, or Settings, or choose **Quit TypeSpeak** to stop it completely.
 
@@ -208,17 +213,13 @@ Then open `http://127.0.0.1:4173/`. Browser preview uses the built-in offline de
 - Generic endpoint models must expose an OpenAI-compatible multipart transcription endpoint returning a JSON `text` field.
 - Cloud API keys are session-only and must be entered again after restarting the app.
 - First transcription is slower because the model must be loaded into memory.
-- Whisper can still miss Lebanese-English code-switches; the Lebanese benchmark remains necessary.
+- Whisper can still miss Lebanese-English code-switches.
 - Mixed-route translation currently chooses Arabic or English as the predominant source script before running M2M100. Sentence-level multilingual routing is future work.
 - Light cleanup only collapses whitespace and immediate duplicate tokens. Translation is a separate, explicit output step.
 - Clipboard restoration works when the previous clipboard content is text.
 - Windows may block insertion into an elevated application when TypeSpeak runs at a lower privilege level.
 - Password and secure-field detection must be added before production use.
 
-## Research
-
-The product analysis, model-routing decision, platform constraints, Arabic speech papers, benchmark design, and roadmap are in [SPEAKLY_RESEARCH.md](./SPEAKLY_RESEARCH.md).
-
 ## License
 
-TypeSpeak is open-source software released under the [MIT License](./LICENSE). You can use, modify, distribute, and extend it with new speech models and languages.
+TypeSpeak is open-source software released under the [MIT License](./LICENSE), developed by [NABILNET.AI](https://nabilnet.ai). You can use, modify, distribute, and extend it with new speech models and languages.
