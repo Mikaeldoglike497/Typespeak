@@ -1,0 +1,10 @@
+src-tauri/target/
+src-tauri/gen/
+runtime/
+runtime-cuda/
+models/*.bin
+*.pdb
+*.wav
+.env
+.env.*
+!.env.example

@@ -1,0 +1,60 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+body {
+  display: grid;
+  place-items: center;
+}
+
+.listening-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 112px;
+  height: 38px;
+  border: 1px solid rgba(230, 241, 241, 0.3);
+  border-radius: 999px;
+  background: rgba(16, 22, 24, 0.94);
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.listening-pill span {
+  width: 3px;
+  height: 4px;
+  border-radius: 999px;
+  background: #edf5f4;
+  opacity: 0.58;
+  transform-origin: center;
+  transition:
+    height 46ms linear,
+    opacity 80ms ease;
+}
+
+.listening-pill .voice-mark {
+  background: #4bc7bd;
+  box-shadow: 0 0 8px rgba(75, 199, 189, 0.7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .listening-pill span {
+    transition-duration: 120ms;
+  }
+}

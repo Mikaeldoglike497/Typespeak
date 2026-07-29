@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="TypeSpeak — Lebanese-first bilingual voice typing for Windows."
+    />
+    <title>TypeSpeak</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="titlebar" data-tauri-drag-region>
+        <div class="titlebar-brand" data-tauri-drag-region>
+          <span class="brand-glyph" aria-hidden="true">t›</span>
+          <span>TypeSpeak</span>
+          <span class="build-label">OFFLINE LAB</span>
+        </div>
+        <div class="privacy-line" id="privacyLine" data-tauri-drag-region>
+          <span class="privacy-dot" aria-hidden="true"></span>
+          Local route · audio stays on this PC
+        </div>
+        <div class="window-controls">
+          <button class="window-button" id="minimizeWindow" aria-label="Minimize">
+            <span aria-hidden="true">−</span>
+          </button>
+          <button class="window-button" id="maximizeWindow" aria-label="Maximize">
+            <span aria-hidden="true">□</span>
+          </button>
+          <button class="window-button window-button-close" id="closeWindow" aria-label="Close">
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <nav class="rail" aria-label="Primary navigation">
+          <button class="rail-logo" data-view="dictate" aria-label="TypeSpeak home">
+            <span class="rail-logo-mark">ت</span>
+            <span class="rail-logo-copy"><b>TypeSpeak</b><small>LOCAL VOICE</small></span>
+          </button>
+          <div class="rail-actions">
+            <button class="rail-button is-active" data-view="dictate" aria-label="Dictate" title="Dictate">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 15a4 4 0 0 0 4-4V7a4 4 0 1 0-8 0v4a4 4 0 0 0 4 4Z"></path>
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"></path>
+              </svg>
+              <span>Dictate</span>
+            </button>
+            <button class="rail-button" data-view="recent" aria-label="Recent" title="Recent">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path>
+                <path d="M3 3v5h5M12 7v5l3 2"></path>
+              </svg>
+              <span>Recent</span>
+            </button>
+            <button class="rail-button" data-view="dictionary" aria-label="Dictionary" title="Dictionary">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H20v17H7.5A3.5 3.5 0 0 0 4 22V5.5Z"></path>
+                <path d="M4 18.5A3.5 3.5 0 0 1 7.5 15H20M8 7h8M8 11h5"></path>
+              </svg>
+              <span>Dictionary</span>
+            </button>
+            <button class="rail-button" data-view="shortcuts" aria-label="Shortcuts" title="Shortcuts">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="14" rx="3"></rect>
+                <path d="M7 10h2M12 10h2M17 10h.01M7 14h7M16 14h2"></path>
+              </svg>
+              <span>Shortcuts</span>
+            </button>
+            <button class="rail-button" data-view="settings" aria-label="Settings" title="Settings">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path>
+              </svg>
+              <span>Settings</span>
+            </button>
+          </div>
+          <div class="rail-bottom">
+            <span class="tray-state"><i></i><span><b>Active in background</b><small>Close hides to system tray</small></span></span>
+            <span class="version">Version 0.1.0</span>
+          </div>
+        </nav>
+
+        <main class="main view-panel is-active" data-view-panel="dictate">
+          <section class="content-column">
+            <div class="intro-row">
+              <div>
+                <p class="eyebrow">LEBANESE-FIRST · ON-DEVICE</p>
+                <h1>
+                  Say it like you say it.
+                  <span lang="ar" dir="rtl">إحكيها متل ما بتحكيها.</span>
+                </h1>
+              </div>
+              <div class="session-state" id="sessionState">
+                <span class="state-light"></span>
+                <span>Ready</span>
+              </div>
+            </div>
+
+            <div class="control-strip">
+              <div class="segmented-control" id="languageControl" aria-label="Dictation language">
+                <button class="segment is-selected" data-language="mixed">Mixed <small>AR + EN</small></button>
+                <button class="segment" data-language="ar"><span lang="ar">عربي</span></button>
+                <button class="segment" data-language="en">English</button>
+              </div>
+              <label class="compact-field">
+                <span id="activeRouteLabel">Model for Mixed</span>
+                <select id="providerSelect" aria-label="Model for the selected language">
+                  <option value="mock">Offline demo</option>
+                </select>
+              </label>
+              <label class="compact-field output-field">
+                <span id="activeOutputLabel">Output for Mixed</span>
+                <select id="outputSelect" aria-label="Output language for the selected lane">
+                  <option value="mixed">Mixed · عربي + EN</option>
+                </select>
+              </label>
+              <div class="offline-badge" id="privacyBadge" aria-label="Local connection">
+                <span aria-hidden="true"></span>
+                <b id="privacyBadgeText">LOCAL</b>
+              </div>
+            </div>
+
+            <section class="speech-lane" aria-labelledby="speechLaneTitle">
+              <div class="lane-topline">
+                <div>
+                  <p class="lane-label" id="speechLaneTitle">PUSH-TO-TALK LANE</p>
+                  <p class="lane-status" id="laneStatus">Hold the shortcut from any text field</p>
+                </div>
+                <div class="shortcut" id="shortcutDisplay" aria-label="Push-to-talk shortcut">
+                  <kbd>Ctrl</kbd><span>+</span><kbd>Alt</kbd><span>+</span><kbd>Space</kbd>
+                </div>
+              </div>
+
+              <div class="wave-stage" id="waveStage">
+                <div class="script-marker marker-ar" lang="ar" dir="rtl">
+                  <span>عربي</span>
+                  <i aria-hidden="true">←</i>
+                </div>
+                <div class="waveform" id="waveform" aria-hidden="true"></div>
+                <div class="script-marker marker-en">
+                  <i aria-hidden="true">→</i>
+                  <span>English</span>
+                </div>
+                <div class="record-core" id="recordCore" aria-hidden="true">
+                  <span class="core-dot"></span>
+                </div>
+              </div>
+
+              <div class="record-row">
+                <button class="record-button" id="recordButton">
+                  <span class="record-icon" aria-hidden="true">
+                    <i></i>
+                  </span>
+                  <span class="record-copy">
+                    <strong id="recordAction">Start a test recording</strong>
+                    <small id="recordHint">or hold Ctrl + Alt + Space anywhere</small>
+                  </span>
+                </button>
+                <div class="record-clock">
+                  <span id="recordTimer">00:00.0</span>
+                  <small>MAX 01:30</small>
+                </div>
+              </div>
+            </section>
+
+            <section class="transcript-panel" aria-labelledby="transcriptTitle">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">FINAL TEXT</p>
+                  <h2 id="transcriptTitle">Transcript</h2>
+                </div>
+                <div class="transcript-meta">
+                  <span id="activeModelLabel">Offline demo</span>
+                  <span class="meta-separator"></span>
+                  <span id="latencyLabel">No run yet</span>
+                </div>
+              </div>
+              <div class="transcript-wrap">
+                <textarea
+                  id="transcript"
+                  spellcheck="true"
+                  aria-label="Transcript"
+                  placeholder="Your Arabic and English transcript will appear here…"
+                ></textarea>
+                <div class="empty-guide" id="emptyGuide">
+                  <span class="guide-mark">”</span>
+                  <p>
+                    جرّب جملة فيها عربي وEnglish.<br />
+                    <small>TypeSpeak keeps each language in its own script.</small>
+                  </p>
+                </div>
+              </div>
+              <div class="transcript-actions">
+                <div class="mode-tabs" id="cleanupMode">
+                  <button class="mode-tab is-active" data-mode="verbatim">Verbatim</button>
+                  <button class="mode-tab" data-mode="polished">Light cleanup</button>
+                </div>
+                <div class="action-group">
+                  <button class="text-button" id="clearTranscript">Clear</button>
+                  <button class="secondary-button" id="copyTranscript">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+                      <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"></path>
+                    </svg>
+                    Copy
+                  </button>
+                  <button class="primary-button" id="insertTranscript">
+                    Insert in previous app
+                    <span aria-hidden="true">↗</span>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+          </section>
+
+          <aside class="side-column">
+            <section class="side-card model-card">
+              <div class="side-heading">
+                <div>
+                  <p class="eyebrow">MODEL ROUTER</p>
+                  <h2>One model per lane</h2>
+                </div>
+                <button class="icon-button" id="refreshProviders" aria-label="Refresh model status">↻</button>
+              </div>
+              <div class="route-grid" aria-label="Language model routes">
+                <label class="route-row route-ar">
+                  <span><b lang="ar" dir="rtl">عربي</b><small>ARABIC</small></span>
+                  <span class="route-controls">
+                    <select id="routeArabic" data-route="ar" aria-label="Model for Arabic"></select>
+                    <select id="outputArabic" data-output-route="ar" aria-label="Output language for Arabic"></select>
+                  </span>
+                </label>
+                <label class="route-row route-mixed">
+                  <span><b>ع + E</b><small>MIXED</small></span>
+                  <span class="route-controls">
+                    <select id="routeMixed" data-route="mixed" aria-label="Model for mixed Arabic and English"></select>
+                    <select id="outputMixed" data-output-route="mixed" aria-label="Output language for mixed Arabic and English"></select>
+                  </span>
+                </label>
+                <label class="route-row route-en">
+                  <span><b>English</b><small>ENGLISH</small></span>
+                  <span class="route-controls">
+                    <select id="routeEnglish" data-route="en" aria-label="Model for English"></select>
+                    <select id="outputEnglish" data-output-route="en" aria-label="Output language for English"></select>
+                  </span>
+                </label>
+              </div>
+              <div class="model-divider"><span>available connections</span></div>
+              <div class="provider-list" id="providerList">
+                <div class="provider-skeleton"></div>
+                <div class="provider-skeleton"></div>
+              </div>
+              <button class="connection-help" id="connectionHelp">
+                <span>Add or configure a model</span>
+                <span aria-hidden="true">→</span>
+              </button>
+            </section>
+
+            <section class="side-card glossary-card">
+              <div class="side-heading">
+                <div>
+                  <p class="eyebrow">PERSONAL WORDS</p>
+                  <h2>Dictionary</h2>
+                </div>
+                <span class="count-badge" id="glossaryCount">3</span>
+              </div>
+              <p class="side-copy">Names and product words the local model should keep exactly.</p>
+              <div class="glossary-tags" id="glossaryTags"></div>
+              <label class="glossary-input">
+                <span class="sr-only">Add a dictionary term</span>
+                <input id="glossaryInput" placeholder="Add a word…" maxlength="60" />
+                <button id="addGlossary" aria-label="Add word">+</button>
+              </label>
+            </section>
+
+            <section class="side-card session-card">
+              <div class="side-heading">
+                <div>
+                  <p class="eyebrow">THIS SESSION</p>
+                  <h2 id="sessionPrivacyTitle">Local route</h2>
+                </div>
+                <span class="privacy-shield" aria-label="Private session">◇</span>
+              </div>
+              <div class="metrics">
+                <div>
+                  <strong id="metricRuns">0</strong>
+                  <span>runs</span>
+                </div>
+                <div>
+                  <strong id="metricMinutes">0.0</strong>
+                  <span>minutes</span>
+                </div>
+                <div>
+                  <strong id="metricProviders">1</strong>
+                  <span>engines</span>
+                </div>
+              </div>
+              <p class="session-note" id="sessionPrivacyNote">Audio stays on this computer when the selected route is local.</p>
+            </section>
+
+            <div class="target-note" id="targetNote">
+              <span class="target-icon" aria-hidden="true">⌖</span>
+              <div>
+                <strong>No target captured</strong>
+                <p>Use the global shortcut from the field where you want the text.</p>
+              </div>
+            </div>
+          </aside>
+        </main>
+
+        <main class="view-panel page-view" data-view-panel="recent" aria-labelledby="recentTitle">
+          <section class="page-shell">
+            <header class="page-header">
+              <div>
+                <p class="eyebrow">LOCAL HISTORY</p>
+                <h1 id="recentTitle">Recent</h1>
+                <p>Your latest dictations, stored only on this computer.</p>
+              </div>
+              <button class="secondary-button danger-button" id="clearRecent" type="button">Clear history</button>
+            </header>
+            <div class="history-metrics" aria-label="Dictation history summary">
+              <article><span>DICTATIONS</span><strong id="recentCount">0</strong></article>
+              <article><span>WORDS</span><strong id="recentWords">0</strong></article>
+              <article><span>VOICE TIME</span><strong id="recentMinutes">0.0 <small>min</small></strong></article>
+            </div>
+            <section class="recent-surface">
+              <div class="surface-heading">
+                <h2>Transcript history</h2>
+                <span id="recentPrivacy">Saved locally · never uploaded</span>
+              </div>
+              <div class="recent-list" id="recentList"></div>
+              <div class="page-empty" id="recentEmpty">
+                <span class="empty-wave" aria-hidden="true">··········</span>
+                <h3>No dictations yet</h3>
+                <p>Your next successful transcription will appear here.</p>
+                <button class="secondary-button" data-view="dictate" type="button">Start dictating</button>
+              </div>
+            </section>
+          </section>
+        </main>
+
+        <main class="view-panel page-view" data-view-panel="dictionary" aria-labelledby="dictionaryTitle">
+          <section class="page-shell">
+            <header class="page-header">
+              <div>
+                <p class="eyebrow">PERSONAL LEXICON</p>
+                <h1 id="dictionaryTitle">Dictionary</h1>
+                <p>Names, Lebanese expressions, and product terms TypeSpeak should keep exactly.</p>
+              </div>
+            </header>
+            <form class="dictionary-add" id="dictionaryForm">
+              <label>
+                <span class="sr-only">Add a dictionary word</span>
+                <input id="dictionaryInput" maxlength="60" placeholder="Add a word, name, or phrase…" />
+              </label>
+              <button class="primary-button" type="submit">+ Add word</button>
+            </form>
+            <label class="dictionary-search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+              <span class="sr-only">Search dictionary</span>
+              <input id="dictionarySearch" type="search" placeholder="Search your dictionary" />
+            </label>
+            <section class="dictionary-surface">
+              <div class="surface-heading">
+                <h2>Saved locally</h2>
+                <span><b id="dictionaryCount">0</b> terms</span>
+              </div>
+              <div class="dictionary-list" id="dictionaryList"></div>
+              <div class="page-empty is-hidden" id="dictionaryEmpty">
+                <h3>No matching words</h3>
+                <p>Try a different search, or add the term above.</p>
+              </div>
+            </section>
+          </section>
+        </main>
+
+        <main class="view-panel page-view" data-view-panel="shortcuts" aria-labelledby="shortcutsTitle">
+          <section class="page-shell">
+            <header class="page-header">
+              <div>
+                <p class="eyebrow">HOLD TO DICTATE</p>
+                <h1 id="shortcutsTitle">Shortcuts</h1>
+                <p>Use any standard Windows key or key combination as your global push-to-talk trigger.</p>
+              </div>
+            </header>
+            <section class="shortcut-feature-card">
+              <div class="shortcut-feature-copy">
+                <span class="feature-number">01</span>
+                <div>
+                  <h2>Global dictation</h2>
+                  <p><b>Quick tap:</b> keeps the button’s normal Windows action.</p>
+                  <p><b>Hold for 0.3 seconds:</b> starts recording; release to transcribe and insert.</p>
+                </div>
+              </div>
+              <div class="shortcut-editor">
+                <div class="shortcut-preview shortcut-preview-large" id="shortcutPagePreview" aria-live="polite"></div>
+                <button class="primary-button" id="changeShortcutPage" type="button">Change shortcut</button>
+              </div>
+            </section>
+            <section class="recommended-keys">
+              <div class="surface-heading">
+                <div>
+                  <h2>Recommended single keys</h2>
+                  <p>A quick press still behaves normally; only a hold belongs to TypeSpeak.</p>
+                </div>
+              </div>
+              <div class="key-option-grid">
+                <button class="key-option" data-shortcut-option="Insert" type="button"><kbd>Ins</kbd><span>Insert</span></button>
+                <button class="key-option" data-shortcut-option="PrintScreen" type="button"><kbd>Prt Scr</kbd><span>Print Screen</span></button>
+                <button class="key-option" data-shortcut-option="F8" type="button"><kbd>F8</kbd><span>Function key</span></button>
+                <button class="key-option" data-shortcut-option="Pause" type="button"><kbd>Pause</kbd><span>Pause / Break</span></button>
+                <button class="key-option" data-shortcut-option="ScrollLock" type="button"><kbd>ScrLk</kbd><span>Scroll Lock</span></button>
+              </div>
+            </section>
+            <section class="supported-keys">
+              <h2>Supported Windows buttons</h2>
+              <p>Letters, numbers, punctuation, F1–F24, arrows, navigation keys, numpad, volume and media keys, plus Ctrl / Alt / Shift / Windows combinations.</p>
+            </section>
+          </section>
+        </main>
+
+        <main class="view-panel page-view" data-view-panel="settings" aria-labelledby="appSettingsTitle">
+          <section class="page-shell settings-shell">
+            <header class="page-header">
+              <div>
+                <p class="eyebrow">APP PREFERENCES</p>
+                <h1 id="appSettingsTitle">Settings</h1>
+                <p>Control local privacy, background behaviour, models, and translation.</p>
+              </div>
+            </header>
+            <section class="settings-group">
+              <div class="settings-group-heading"><span>GENERAL</span><h2>App behaviour</h2></div>
+              <label class="setting-row">
+                <span><b>Keep TypeSpeak active in the system tray</b><small>Closing the window hides it beside the Windows clock; push-to-talk stays ready.</small></span>
+                <input type="checkbox" checked disabled aria-label="Keep TypeSpeak active in system tray" />
+              </label>
+              <label class="setting-row">
+                <span><b>Save Recent locally</b><small>Keep transcript history only on this computer. Turning this off clears saved history.</small></span>
+                <input id="saveRecentToggle" type="checkbox" checked />
+              </label>
+            </section>
+            <section class="settings-group">
+              <div class="settings-group-heading"><span>VOICE MODELS</span><h2>Models & translation</h2></div>
+              <div class="setting-row">
+                <span><b>Configure speech models</b><small>Choose separate Arabic, English, and Mixed routes; local downloads and API routes remain optional.</small></span>
+                <button class="secondary-button" id="openSettings" type="button">Configure models</button>
+              </div>
+              <div class="setting-row">
+                <span><b>Global shortcut</b><small id="settingsShortcutSummary">Hold Ctrl + Alt + Space to dictate.</small></span>
+                <button class="secondary-button" data-view="shortcuts" type="button">Open Shortcuts</button>
+              </div>
+            </section>
+            <section class="settings-group">
+              <div class="settings-group-heading"><span>PRIVACY</span><h2>Local by design</h2></div>
+              <div class="privacy-settings-note">
+                <span class="privacy-shield" aria-hidden="true">◇</span>
+                <p>Local models keep audio on this PC. TypeSpeak labels API routes clearly before any audio leaves the computer.</p>
+              </div>
+            </section>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div class="modal-backdrop is-hidden" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <section class="modal">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">TYPESPEAK SETTINGS</p>
+            <h2 id="settingsTitle">Settings</h2>
+          </div>
+          <button class="icon-button" id="closeSettings" aria-label="Close settings">×</button>
+        </div>
+        <p class="modal-lead">
+          Connect and route models independently for Arabic, English, or Mixed.
+        </p>
+        <section class="shortcut-card" aria-labelledby="shortcutTitle">
+          <div>
+            <p class="eyebrow">PUSH TO TALK</p>
+            <h3 id="shortcutTitle">Global shortcut</h3>
+            <p>Quick tap keeps the original key action. Hold for 0.3 seconds, then release to transcribe and insert.</p>
+          </div>
+          <div class="shortcut-editor">
+            <div class="shortcut-preview" id="shortcutPreview" aria-live="polite"></div>
+            <button class="secondary-button" id="changeShortcut" type="button">Change</button>
+          </div>
+        </section>
+        <section class="translator-card" aria-labelledby="translatorTitle">
+          <div>
+            <p class="eyebrow">LOCAL TRANSLATION</p>
+            <h3 id="translatorTitle">M2M100 · 100 languages</h3>
+            <p id="translatorStatus">Checking the local translator…</p>
+          </div>
+          <button class="secondary-button" id="installTranslator" type="button">Download</button>
+        </section>
+        <div class="key-list" id="keyList"></div>
+        <form class="model-form" id="modelForm">
+          <div class="form-heading">
+            <div>
+              <p class="eyebrow">ADD MODEL</p>
+              <h3 id="modelFormTitle">Connect another model</h3>
+            </div>
+            <button class="text-button is-hidden" id="cancelModelEdit" type="button">Cancel edit</button>
+          </div>
+          <input id="modelEditId" type="hidden" />
+          <div class="model-form-grid">
+            <label>
+              <span>Display name</span>
+              <input id="modelName" required maxlength="60" placeholder="e.g. Cohere Arabic local" />
+            </label>
+            <label>
+              <span>Connection</span>
+              <select id="modelConnection">
+                <option value="managed">Managed GGUF download</option>
+                <option value="local">Local endpoint</option>
+                <option value="api">Cloud API</option>
+              </select>
+            </label>
+            <label class="form-span">
+              <span id="modelEndpointLabel">Hugging Face or direct GGUF URL</span>
+              <input id="modelEndpoint" required type="url" placeholder="http://127.0.0.1:8000/v1/audio/transcriptions" />
+            </label>
+            <label>
+              <span id="modelIdentifierLabel">CrispASR backend</span>
+              <input id="modelIdentifier" required placeholder="auto, cohere, qwen3, omniasr…" />
+            </label>
+            <label id="modelApiKeyField">
+              <span>API key <small>session only</small></span>
+              <input id="modelApiKey" type="password" autocomplete="off" placeholder="Optional for local" />
+            </label>
+            <label id="modelChecksumField">
+              <span>SHA-256 <small>recommended</small></span>
+              <input id="modelChecksum" autocomplete="off" maxlength="64" placeholder="64-character checksum" />
+            </label>
+          </div>
+          <div class="model-form-actions">
+            <span id="modelFormNote">Paste a Hugging Face file link or direct GGUF URL.</span>
+            <button class="primary-button" id="saveModel" type="submit">Add model</button>
+          </div>
+        </form>
+        <div class="modal-note">
+          <span>i</span>
+          API keys remain in memory for this session and are not written to local storage.
+          Managed GGUF files are downloaded over HTTPS and stay under TypeSpeak's local model folder.
+          The selected CrispASR backend must support the model architecture.
+        </div>
+      </section>
+    </div>
+
+    <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>
