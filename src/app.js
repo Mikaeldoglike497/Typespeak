@@ -177,9 +177,11 @@ const BUILTIN_MODELS = [
     connection: "native",
     backendEngine: "whisper",
     configured: false,
+    managed: true,
+    downloadBytes: 574_041_195,
     builtIn: true,
     note: "Native whisper.cpp runtime. Multilingual and fully offline.",
-    setupHint: "Run scripts\\setup-local-whisper.ps1",
+    setupHint: "Download 574 MB",
   },
   {
     id: "cohere-local",
@@ -1024,6 +1026,10 @@ async function installSpeechModel(modelId) {
   }
   const size = model.downloadBytes ? ` (${formatBytes(model.downloadBytes)})` : "";
   if (!window.confirm(`Download and install ${model.name}${size}?`)) return false;
+  return downloadSpeechModel(model);
+}
+
+async function downloadSpeechModel(model) {
   state.downloads.set(model.id, {
     id: model.id,
     stage: "starting",
@@ -1054,6 +1060,15 @@ async function installSpeechModel(modelId) {
     state.downloads.delete(model.id);
     await loadEngines();
   }
+}
+
+async function installRequestedDefaultModel() {
+  if (!invoke) return;
+  const requested = await callNative("default_model_download_requested");
+  const whisper = state.models.find((model) => model.id === "whisper-local");
+  if (!requested || !whisper || whisper.configured || state.downloads.has(whisper.id)) return;
+  toast("Downloading Whisper", "The installer requested the default local model download.");
+  await downloadSpeechModel(whisper);
 }
 
 async function installTranslator() {
@@ -2314,6 +2329,9 @@ async function initialize() {
   updateRecordingUi();
   updateMetrics();
   setTranscript("");
+  installRequestedDefaultModel().catch((error) => {
+    console.warn("TypeSpeak could not start the installer-requested model download:", error);
+  });
 
   if (!invoke) {
     setStatus("preview", "Preview");

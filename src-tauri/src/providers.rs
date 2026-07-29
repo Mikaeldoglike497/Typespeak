@@ -15,6 +15,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const WHISPER_ENGINE: &str = "whisper";
+const WHISPER_MODEL_ID: &str = "whisper-local";
 const COHERE_ENGINE: &str = "cohere";
 const QWEN_ENGINE: &str = "qwen3";
 const OMNI_ENGINE: &str = "omniasr";
@@ -429,23 +430,26 @@ pub fn warm_whisper(runtime: &WhisperRuntime) -> Result<(), String> {
 }
 
 fn whisper_status() -> EngineStatus {
+    let catalog = model_manager::catalog_entry(WHISPER_MODEL_ID).expect("built-in catalog entry");
     let installation = find_whisper_installation();
     let model = installation
         .as_ref()
         .map(|paths| model_name(&paths.model))
-        .unwrap_or(DEFAULT_MODEL_FILE)
+        .unwrap_or(catalog.file_name)
         .to_owned();
     EngineStatus {
         id: WHISPER_ENGINE,
         name: "Whisper local",
         model,
         configured: installation.is_some(),
-        setup_hint:
-            "runtime-cuda\\whisper-server.exe or runtime\\whisper-server.exe + models\\ggml-large-v3-turbo-q5_0.bin"
-                .into(),
+        setup_hint: if installation.is_some() {
+            "Installed and ready".into()
+        } else {
+            format!("Download {}", format_bytes(catalog.bytes))
+        },
         note: "Runs fully on this computer through a warm whisper.cpp service. Uses CUDA automatically when installed; no audio is uploaded.",
-        managed: false,
-        download_bytes: None,
+        managed: true,
+        download_bytes: Some(catalog.bytes),
     }
 }
 
@@ -977,7 +981,8 @@ fn glossary_prompt(glossary: &[String], language: &str) -> String {
 
 fn require_whisper_installation() -> Result<WhisperInstallation, String> {
     find_whisper_installation().ok_or_else(|| {
-        "Local Whisper is not installed. Run .\\scripts\\setup-local-whisper.ps1, then refresh the engine status.".into()
+        "Whisper large-v3-turbo is not installed. Select Whisper in TypeSpeak and choose Download."
+            .into()
     })
 }
 
@@ -1072,6 +1077,9 @@ fn server_candidates() -> Vec<PathBuf> {
 
 fn model_candidates() -> Vec<PathBuf> {
     let mut candidates = env_path("TYPESPEAK_WHISPER_MODEL");
+    if let Some(managed_model) = model_manager::catalog_model_path_by_id(WHISPER_MODEL_ID) {
+        candidates.push(managed_model);
+    }
     for root in search_roots() {
         for model in MODEL_CANDIDATES {
             candidates.push(root.join("models").join(model));

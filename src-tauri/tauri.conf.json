@@ -48,16 +48,15 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "msi"],
-    "publisher": "TypeSpeak",
-    "copyright": "Copyright © 2026 TypeSpeak",
+    "publisher": "NABILNET.AI",
+    "copyright": "Copyright © 2026 NABILNET.AI",
     "category": "Productivity",
     "shortDescription": "Private local voice typing for Arabic, Lebanese, English, and mixed speech.",
-    "longDescription": "TypeSpeak is a Lebanese-first Windows dictation app with local speech models, per-language routing, translation, global hold-to-talk shortcuts, and private on-device transcript history.",
+    "longDescription": "TypeSpeak, developed by NABILNET.AI, is a Lebanese-first Windows dictation app with local speech models, per-language routing, translation, global hold-to-talk shortcuts, and private on-device transcript history.",
     "icon": ["icons/icon.ico", "icons/icon.png"],
     "resources": {
       "../runtime/": "runtime/",
-      "../runtime-cuda/": "runtime-cuda/",
-      "../models/": "models/"
+      "../runtime-cuda/": "runtime-cuda/"
     },
     "windows": {
       "wix": {
@@ -69,7 +68,8 @@
         "installerIcon": "icons/icon.ico",
         "languages": ["English"],
         "compression": "lzma",
-        "startMenuFolder": "TypeSpeak"
+        "startMenuFolder": "TypeSpeak",
+        "installerHooks": "./windows/hooks.nsh"
       }
     }
   }

@@ -25,6 +25,7 @@ use tauri::{
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 const PUSH_TO_TALK_HOLD_MS: u64 = 280;
+const DEFAULT_MODEL_DOWNLOAD_ARGUMENT: &str = "--download-default-model";
 
 #[derive(Default)]
 struct TargetWindow(Arc<Mutex<isize>>);
@@ -119,6 +120,11 @@ fn engine_status() -> Vec<EngineStatus> {
 #[tauri::command]
 fn managed_model_status(model_id: String) -> Result<ManagedModelStatus, String> {
     model_manager::catalog_status(&model_id)
+}
+
+#[tauri::command]
+fn default_model_download_requested() -> bool {
+    std::env::args().any(|argument| argument == DEFAULT_MODEL_DOWNLOAD_ARGUMENT)
 }
 
 #[tauri::command]
@@ -994,6 +1000,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             engine_status,
             managed_model_status,
+            default_model_download_requested,
             custom_model_status,
             install_managed_model,
             install_custom_model,

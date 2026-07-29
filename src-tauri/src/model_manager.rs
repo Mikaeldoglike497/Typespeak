@@ -23,7 +23,14 @@ pub struct CatalogModel {
     pub bytes: u64,
 }
 
-const CATALOG: [CatalogModel; 4] = [
+const CATALOG: [CatalogModel; 5] = [
+    CatalogModel {
+        id: "whisper-local",
+        file_name: "ggml-large-v3-turbo-q5_0.bin",
+        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
+        sha256: "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+        bytes: 574_041_195,
+    },
     CatalogModel {
         id: "cohere-local",
         file_name: "cohere-transcribe-arabic-q4_k-imatrix.gguf",
@@ -244,7 +251,7 @@ fn download_model(app: &AppHandle, spec: DownloadSpec<'_>) -> Result<(), String>
         .ok_or_else(|| "The managed model destination is invalid.".to_string())?;
     fs::create_dir_all(parent)
         .map_err(|error| format!("Could not create the model directory: {error}"))?;
-    let partial = spec.destination.with_extension("gguf.part");
+    let partial = spec.destination.with_extension("part");
     download_to_partial(app, spec, &partial).map_err(|error| retryable_error(error, &partial))?;
     finish_install(&partial, spec.destination)?;
     emit_progress(
@@ -650,6 +657,7 @@ mod tests {
     #[test]
     fn catalog_contains_every_visible_managed_model() {
         for id in [
+            "whisper-local",
             "cohere-local",
             "qwen-local",
             "omni-local",
