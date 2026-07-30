@@ -2,6 +2,7 @@ const tauri = window.__TAURI__;
 const invoke = tauri?.core?.invoke;
 const listen = tauri?.event?.listen;
 const emit = tauri?.event?.emit;
+const emitTo = tauri?.event?.emitTo;
 
 const elements = {
   sessionState: document.querySelector("#sessionState"),
@@ -19,6 +20,9 @@ const elements = {
   outputArabic: document.querySelector("#outputArabic"),
   outputMixed: document.querySelector("#outputMixed"),
   outputEnglish: document.querySelector("#outputEnglish"),
+  settingsOutputArabic: document.querySelector("#settingsOutputArabic"),
+  settingsOutputMixed: document.querySelector("#settingsOutputMixed"),
+  settingsOutputEnglish: document.querySelector("#settingsOutputEnglish"),
   speechLane: document.querySelector(".speech-lane"),
   laneStatus: document.querySelector("#laneStatus"),
   waveform: document.querySelector("#waveform"),
@@ -55,6 +59,8 @@ const elements = {
   translatorCard: document.querySelector(".translator-card"),
   translatorStatus: document.querySelector("#translatorStatus"),
   installTranslator: document.querySelector("#installTranslator"),
+  settingsTranslatorStatus: document.querySelector("#settingsTranslatorStatus"),
+  settingsInstallTranslator: document.querySelector("#settingsInstallTranslator"),
   shortcutPreview: document.querySelector("#shortcutPreview"),
   changeShortcut: document.querySelector("#changeShortcut"),
   modelForm: document.querySelector("#modelForm"),
@@ -93,6 +99,7 @@ const elements = {
   shortcutPagePreview: document.querySelector("#shortcutPagePreview"),
   changeShortcutPage: document.querySelector("#changeShortcutPage"),
   settingsShortcutSummary: document.querySelector("#settingsShortcutSummary"),
+  startWithWindowsToggle: document.querySelector("#startWithWindowsToggle"),
   saveRecentToggle: document.querySelector("#saveRecentToggle"),
 };
 
@@ -113,9 +120,9 @@ const state = {
     mixed: "whisper-local",
   },
   outputRoutes: {
-    ar: "ar",
-    en: "en",
-    mixed: "mixed",
+    ar: "original",
+    en: "original",
+    mixed: "original",
   },
   translator: null,
   downloads: new Map(),
@@ -141,6 +148,7 @@ const state = {
   enginesUsed: new Set(),
   recent: [],
   saveRecent: true,
+  startupEnabled: true,
   lastOverlayLevelAt: 0,
 };
 
@@ -151,6 +159,7 @@ const SHORTCUT_STORAGE_KEY = "typespeak.shortcut.v1";
 const GLOSSARY_STORAGE_KEY = "typespeak.glossary.v1";
 const RECENT_STORAGE_KEY = "typespeak.recent.v1";
 const SAVE_RECENT_STORAGE_KEY = "typespeak.saveRecent.v1";
+const STARTUP_PREFERENCE_STORAGE_KEY = "typespeak.startWithWindows.v1";
 const DEFAULT_PUSH_TO_TALK_SHORTCUT = "Control+Alt+Space";
 const SHORTCUT_CODE_PATTERN =
   /^(?:Key[A-Z]|Digit\d|F(?:[1-9]|1\d|2[0-4])|Space|Enter|Tab|Backspace|Delete|Insert|Home|End|PageUp|PageDown|Arrow(?:Up|Down|Left|Right)|CapsLock|PrintScreen|ScrollLock|Pause|NumLock|AudioVolume(?:Down|Up|Mute)|Media(?:Play|Pause|PlayPause|Stop|TrackNext|TrackPrevious)|Backquote|Backslash|BracketLeft|BracketRight|Comma|Equal|Minus|Period|Quote|Semicolon|Slash|Numpad(?:\d|Add|Decimal|Divide|Enter|Equal|Multiply|Subtract))$/;
@@ -160,9 +169,9 @@ const DEFAULT_ROUTES = {
   mixed: "whisper-local",
 };
 const DEFAULT_OUTPUT_ROUTES = {
-  ar: "ar",
-  en: "en",
-  mixed: "mixed",
+  ar: "original",
+  en: "original",
+  mixed: "original",
 };
 const routeLabels = {
   ar: "Arabic",
@@ -270,8 +279,11 @@ function loadSavedOutputRoutes() {
       ...JSON.parse(localStorage.getItem(OUTPUT_STORAGE_KEY) || "{}"),
     };
     for (const route of Object.keys(DEFAULT_OUTPUT_ROUTES)) {
-      if (savedRoutes[route] === "original") {
-        savedRoutes[route] = DEFAULT_OUTPUT_ROUTES[route];
+      if (
+        savedRoutes[route] === "mixed"
+        || (route !== "mixed" && savedRoutes[route] === route)
+      ) {
+        savedRoutes[route] = "original";
       }
     }
     return savedRoutes;
@@ -716,6 +728,9 @@ async function callBrowserFallback(command, payload) {
   if (command === "set_push_to_talk_shortcut") {
     return payload.shortcut;
   }
+  if (command === "startup_enabled" || command === "set_startup_enabled") {
+    return true;
+  }
   return null;
 }
 
@@ -903,7 +918,7 @@ function repairRoutes() {
 }
 
 function repairOutputRoutes() {
-  const supported = new Set(["mixed", ...TRANSLATION_LANGUAGE_CODES]);
+  const supported = new Set(["original", ...TRANSLATION_LANGUAGE_CODES]);
   for (const route of Object.keys(DEFAULT_OUTPUT_ROUTES)) {
     if (!supported.has(state.outputRoutes[route])) {
       state.outputRoutes[route] = DEFAULT_OUTPUT_ROUTES[route];
@@ -1024,8 +1039,6 @@ async function installSpeechModel(modelId) {
     toast("Desktop app required", "Managed models can only be installed from TypeSpeak.", true);
     return false;
   }
-  const size = model.downloadBytes ? ` (${formatBytes(model.downloadBytes)})` : "";
-  if (!window.confirm(`Download and install ${model.name}${size}?`)) return false;
   return downloadSpeechModel(model);
 }
 
@@ -1078,9 +1091,6 @@ async function installTranslator() {
     return false;
   }
   if (state.downloads.has(TRANSLATOR_ID)) return false;
-  if (!window.confirm("Download the M2M100 local translator (526 MB) for 100 output languages?")) {
-    return false;
-  }
   state.downloads.set(TRANSLATOR_ID, {
     id: TRANSLATOR_ID,
     stage: "starting",
@@ -1153,7 +1163,14 @@ function routeSelectElements() {
 }
 
 function outputSelectElements() {
-  return [elements.outputArabic, elements.outputMixed, elements.outputEnglish];
+  return [
+    elements.outputArabic,
+    elements.outputMixed,
+    elements.outputEnglish,
+    elements.settingsOutputArabic,
+    elements.settingsOutputMixed,
+    elements.settingsOutputEnglish,
+  ];
 }
 
 function renderRouteSelects() {
@@ -1170,20 +1187,25 @@ function renderRouteSelects() {
 function renderOutputSelects() {
   outputSelectElements().forEach((select) => {
     const route = select.dataset.outputRoute;
-    populateOutputSelect(select);
+    populateOutputSelect(select, route);
     select.value = state.outputRoutes[route] || DEFAULT_OUTPUT_ROUTES[route];
   });
-  populateOutputSelect(elements.outputSelect);
+  elements.outputSelect.dataset.outputRoute = state.language;
+  populateOutputSelect(elements.outputSelect, state.language);
   elements.outputSelect.value =
     state.outputRoutes[state.language] || DEFAULT_OUTPUT_ROUTES[state.language];
 }
 
-function populateOutputSelect(select) {
+function populateOutputSelect(select, route) {
   select.replaceChildren();
-  const mixed = document.createElement("option");
-  mixed.value = "mixed";
-  mixed.textContent = "Mixed · عربي + EN";
-  select.appendChild(mixed);
+  const original = document.createElement("option");
+  original.value = "original";
+  original.textContent = {
+    ar: "Keep Arabic · no translation",
+    en: "Keep English · no translation",
+    mixed: "Keep Mixed · عربي + English",
+  }[route] || "Keep original · no translation";
+  select.appendChild(original);
   const displayNames = typeof Intl.DisplayNames === "function"
     ? new Intl.DisplayNames(["en"], { type: "language" })
     : null;
@@ -1211,11 +1233,19 @@ function renderTranslatorStatus() {
     : progress
       ? `${progress.percent ?? 0}%`
       : "Download 526 MB";
-  elements.translatorStatus.textContent = installed
+  elements.settingsInstallTranslator.disabled = installed || Boolean(progress) || !invoke;
+  elements.settingsInstallTranslator.textContent = installed
+    ? "Installed"
+    : progress
+      ? `${progress.percent ?? 0}%`
+      : "Download 526 MB";
+  const statusText = installed
     ? "Installed locally · translations never leave this PC"
     : progress
       ? downloadProgressLabel(progress)
       : "Required only when an output language differs from the spoken language.";
+  elements.translatorStatus.textContent = statusText;
+  elements.settingsTranslatorStatus.textContent = statusText;
 }
 
 function activeModel() {
@@ -1228,6 +1258,8 @@ function updateActiveRouteUi() {
   elements.providerSelect.value = model?.id || "";
   elements.activeRouteLabel.textContent = `Model for ${routeLabels[state.language]}`;
   elements.activeOutputLabel.textContent = `Output for ${routeLabels[state.language]}`;
+  elements.outputSelect.dataset.outputRoute = state.language;
+  populateOutputSelect(elements.outputSelect, state.language);
   elements.outputSelect.value =
     state.outputRoutes[state.language] || DEFAULT_OUTPUT_ROUTES[state.language];
   elements.activeModelLabel.textContent = model?.name || "No model";
@@ -1329,8 +1361,8 @@ function connectRecorder(microphoneStream) {
   const source = audioContext.createMediaStreamSource(microphoneStream);
   const processor = audioContext.createScriptProcessor(4096, 1, 1);
   const analyser = audioContext.createAnalyser();
-  analyser.fftSize = 128;
-  analyser.smoothingTimeConstant = 0.72;
+  analyser.fftSize = 256;
+  analyser.smoothingTimeConstant = 0.55;
   processor.onaudioprocess = captureAudioSamples;
   source.connect(analyser);
   analyser.connect(processor);
@@ -1464,19 +1496,24 @@ function idleLaneMessage() {
 function animateWaveform() {
   const bars = [...elements.waveform.children];
   const frequencyBins = new Uint8Array(state.analyser.frequencyBinCount);
+  const timeDomainSamples = new Uint8Array(state.analyser.fftSize);
   const frame = () => {
     if (!state.recording) return;
     state.analyser.getByteFrequencyData(frequencyBins);
+    state.analyser.getByteTimeDomainData(timeDomainSamples);
+    const waveformLevels = reactiveAudioBars(
+      frequencyBins,
+      timeDomainSamples,
+      bars.length,
+    );
     bars.forEach((bar, index) => {
-      const sourceIndex = Math.floor((index / bars.length) * frequencyBins.length);
-      const amplitude = frequencyBins[sourceIndex] / 255;
       const center = 1 - Math.abs(index - bars.length / 2) / (bars.length / 2);
-      bar.style.height = `${7 + amplitude * (22 + center * 42)}px`;
+      bar.style.height = `${7 + waveformLevels[index] * (22 + center * 42)}px`;
     });
     const now = performance.now();
     if (now - state.lastOverlayLevelAt >= 40) {
       state.lastOverlayLevelAt = now;
-      emitOverlayLevels(audioBands(frequencyBins, 9));
+      emitOverlayLevels(reactiveAudioBars(frequencyBins, timeDomainSamples, 9));
     }
     state.animationId = window.requestAnimationFrame(frame);
   };
@@ -1495,9 +1532,34 @@ function audioBands(frequencyBins, count) {
   });
 }
 
+function microphoneVoiceLevel(timeDomainSamples) {
+  if (!timeDomainSamples.length) return 0;
+  let sumSquares = 0;
+  for (const sample of timeDomainSamples) {
+    const normalized = (sample - 128) / 128;
+    sumSquares += normalized * normalized;
+  }
+  const rootMeanSquare = Math.sqrt(sumSquares / timeDomainSamples.length);
+  return Math.min(1, Math.max(0, (rootMeanSquare - 0.006) * 14));
+}
+
+function reactiveAudioBars(frequencyBins, timeDomainSamples, count) {
+  const spectralLevels = audioBands(frequencyBins, count);
+  const voiceLevel = microphoneVoiceLevel(timeDomainSamples);
+  return spectralLevels.map((spectralLevel, index) => {
+    const distanceFromCenter =
+      Math.abs(index - (count - 1) / 2) / Math.max(1, count / 2);
+    const centerProfile = 0.34 + (1 - distanceFromCenter) * 0.66;
+    const texture = 0.84 + (index % 3) * 0.08;
+    return Math.min(1, Math.max(spectralLevel, voiceLevel * centerProfile * texture));
+  });
+}
+
 function emitOverlayLevels(levels) {
-  if (!emit) return;
-  const emission = emit("typespeak://audio-level", levels);
+  const emission = emitTo
+    ? emitTo("recording-overlay", "typespeak://audio-level", levels)
+    : emit?.("typespeak://audio-level", levels);
+  if (!emission) return;
   if (emission?.catch) {
     emission.catch((error) => {
       console.warn("TypeSpeak could not update the recording overlay:", error);
@@ -1682,8 +1744,8 @@ async function cleanedTranscript(transcript) {
 async function translatedTranscript(transcript) {
   const targetLanguage =
     state.outputRoutes[state.language] || DEFAULT_OUTPUT_ROUTES[state.language];
-  if (targetLanguage === "mixed") return transcript;
-  const sourceLanguage = translationSourceLanguage(transcript);
+  if (targetLanguage === "original") return transcript;
+  const sourceLanguage = translationSourceLanguage(transcript, targetLanguage);
   if (sourceLanguage === targetLanguage) return transcript;
   if (!state.translator?.installed) {
     throw new Error(
@@ -1700,15 +1762,17 @@ async function translatedTranscript(transcript) {
   });
 }
 
-function translationSourceLanguage(transcript) {
+function translationSourceLanguage(transcript, targetLanguage) {
   if (state.language !== "mixed") return state.language;
   const arabicCharacters = (transcript.match(/[\u0600-\u06ff]/g) || []).length;
   const latinCharacters = (transcript.match(/[A-Za-z]/g) || []).length;
+  if (targetLanguage === "ar") return latinCharacters > 0 ? "en" : "ar";
+  if (targetLanguage === "en") return arabicCharacters > 0 ? "ar" : "en";
   return arabicCharacters >= latinCharacters ? "ar" : "en";
 }
 
 function languageDisplayName(code) {
-  if (code === "mixed") return "Mixed";
+  if (code === "original") return "Original";
   if (typeof Intl.DisplayNames !== "function") return code.toUpperCase();
   return new Intl.DisplayNames(["en"], { type: "language" }).of(code) || code.toUpperCase();
 }
@@ -1802,13 +1866,15 @@ async function selectRouteModel(route, modelId) {
   if (!model) return;
   if (!model.configured) {
     if (model.managed || model.connection === "managed") {
-      const installed = await installSpeechModel(model.id);
-      if (!installed) {
-        state.routes[route] = previous;
-        renderRouteSelects();
-        updateActiveRouteUi();
-        return;
-      }
+      toast(
+        "Download model first",
+        `Use the Download button beside ${model.name}, then assign it to this language.`,
+        true,
+      );
+      state.routes[route] = previous;
+      renderRouteSelects();
+      updateActiveRouteUi();
+      return;
     } else {
       toast("Model setup needed", `Configure ${model.name} before assigning it.`, true);
       openModelEditor(model.id);
@@ -1825,26 +1891,23 @@ async function selectRouteModel(route, modelId) {
 }
 
 async function selectOutputLanguage(route, language) {
-  const previous = state.outputRoutes[route] || DEFAULT_OUTPUT_ROUTES[route];
-  if (!["mixed", ...TRANSLATION_LANGUAGE_CODES].includes(language)) {
+  if (!["original", ...TRANSLATION_LANGUAGE_CODES].includes(language)) {
     state.outputRoutes[route] = DEFAULT_OUTPUT_ROUTES[route];
     renderOutputSelects();
     updateActiveRouteUi();
     return;
   }
-  if (outputNeedsTranslator(route, language) && !state.translator?.installed) {
-    const installed = await installTranslator();
-    if (!installed) {
-      state.outputRoutes[route] = previous;
-      renderOutputSelects();
-      updateActiveRouteUi();
-      return;
-    }
-  }
   state.outputRoutes[route] = language;
   persistOutputRoutes();
   renderOutputSelects();
   updateActiveRouteUi();
+  if (outputNeedsTranslator(route, language) && !state.translator?.installed) {
+    toast(
+      "Translator download needed",
+      "Download the local translator in Settings before using this output language.",
+      true,
+    );
+  }
 }
 
 function outputNeedsTranslator(route, language) {
@@ -1852,7 +1915,7 @@ function outputNeedsTranslator(route, language) {
 }
 
 function outputPreservesRoute(route, language) {
-  return language === "mixed"
+  return language === "original"
     || (route === "ar" && language === "ar")
     || (route === "en" && language === "en");
 }
@@ -1892,6 +1955,67 @@ function bindSettingsControls() {
   bindShortcutSettings();
   bindModelSettings();
   bindRecentSettings();
+  bindStartupSettings();
+}
+
+function bindStartupSettings() {
+  elements.startWithWindowsToggle.addEventListener("change", saveStartupPreference);
+}
+
+async function saveStartupPreference() {
+  const requested = elements.startWithWindowsToggle.checked;
+  elements.startWithWindowsToggle.disabled = true;
+  try {
+    await callNative("set_startup_enabled", { enabled: requested });
+    const enabled = await callNative("startup_enabled");
+    applyStartupPreference(enabled);
+    showStartupPreferenceToast(enabled);
+  } catch (error) {
+    elements.startWithWindowsToggle.checked = state.startupEnabled;
+    toast("Startup setting unavailable", error?.message || String(error), true);
+  } finally {
+    elements.startWithWindowsToggle.disabled = false;
+  }
+}
+
+function applyStartupPreference(enabled) {
+  state.startupEnabled = enabled;
+  elements.startWithWindowsToggle.checked = enabled;
+  localStorage.setItem(STARTUP_PREFERENCE_STORAGE_KEY, String(enabled));
+}
+
+function showStartupPreferenceToast(enabled) {
+  toast(
+    enabled ? "Windows startup enabled" : "Windows startup disabled",
+    enabled
+      ? "TypeSpeak will launch quietly in the system tray when you sign in."
+      : "TypeSpeak will no longer start automatically with Windows.",
+  );
+}
+
+async function initializeStartupPreference() {
+  if (!invoke) {
+    state.startupEnabled = true;
+    elements.startWithWindowsToggle.checked = true;
+    elements.startWithWindowsToggle.disabled = true;
+    return;
+  }
+  const savedPreference = localStorage.getItem(STARTUP_PREFERENCE_STORAGE_KEY);
+  try {
+    let enabled = await callNative("startup_enabled");
+    if (savedPreference === null) {
+      await callNative("set_startup_enabled", { enabled: true });
+      enabled = await callNative("startup_enabled");
+      applyStartupPreference(enabled);
+      return;
+    }
+    state.startupEnabled = enabled;
+    elements.startWithWindowsToggle.checked = enabled;
+  } catch (error) {
+    elements.startWithWindowsToggle.checked = state.startupEnabled;
+    elements.startWithWindowsToggle.disabled = true;
+    toast("Startup setting unavailable", error?.message || String(error), true);
+  }
 }
 
 function bindShortcutSettings() {
@@ -1915,6 +2039,7 @@ function bindModelSettings() {
   elements.cancelModelEdit.addEventListener("click", resetModelForm);
   elements.modelConnection.addEventListener("change", updateModelFormFields);
   elements.installTranslator.addEventListener("click", installTranslator);
+  elements.settingsInstallTranslator.addEventListener("click", installTranslator);
 }
 
 function bindRecentSettings() {
@@ -2158,8 +2283,10 @@ async function saveModelConnection(event) {
   renderEngines();
   resetModelForm();
   if (connection === "managed") {
-    toast("Model added", `${nextModel.name} is ready for its local download.`);
-    await installSpeechModel(nextModel.id);
+    toast(
+      "Model added",
+      `${nextModel.name} is ready. Use its Download button when you want to install it locally.`,
+    );
   } else {
     toast("Model connected", `${nextModel.name} is now available in all three routes.`);
   }
@@ -2314,6 +2441,7 @@ async function initialize() {
   state.recent = loadRecentHistory();
   state.saveRecent = loadSaveRecentPreference();
   elements.saveRecentToggle.checked = state.saveRecent;
+  await initializeStartupPreference();
   repairOutputRoutes();
   createWaveform();
   renderGlossary();

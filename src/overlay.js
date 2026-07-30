@@ -9,13 +9,16 @@ function clampLevel(value) {
 }
 
 function renderAudioFrame(timestamp) {
-  const audioIsFresh = timestamp - lastAudioFrameAt < 180;
+  const audioIsFresh = timestamp - lastAudioFrameAt < 260;
   bars.forEach((bar, index) => {
-    const target = audioIsFresh ? targetLevels[index] : 0;
+    const centerWeight = 1 - Math.abs(index - (bars.length - 1) / 2) / (bars.length / 2);
+    const waitingPulse =
+      (0.04 + (Math.sin(timestamp / 170 + index * 0.72) + 1) * 0.035) *
+      (0.55 + centerWeight * 0.45);
+    const target = audioIsFresh ? targetLevels[index] : waitingPulse;
     const smoothing = target > displayLevels[index] ? 0.52 : 0.2;
     displayLevels[index] += (target - displayLevels[index]) * smoothing;
-    const centerWeight = 1 - Math.abs(index - (bars.length - 1) / 2) / (bars.length / 2);
-    const height = 4 + displayLevels[index] * (10 + centerWeight * 9);
+    const height = 4 + displayLevels[index] * (13 + centerWeight * 13);
     bar.style.height = `${height.toFixed(1)}px`;
     bar.style.opacity = String(0.52 + displayLevels[index] * 0.48);
   });

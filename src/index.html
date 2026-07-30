@@ -9,13 +9,14 @@
     />
     <meta name="author" content="NABILNET.AI" />
     <title>TypeSpeak</title>
+    <link rel="icon" type="image/png" href="./assets/typespeak-icon.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div class="app-shell">
       <header class="titlebar" data-tauri-drag-region>
         <div class="titlebar-brand" data-tauri-drag-region>
-          <span class="brand-glyph" aria-hidden="true">t›</span>
+          <img class="titlebar-icon" src="./assets/typespeak-icon.png" alt="" />
           <span>TypeSpeak</span>
           <span class="build-label">OFFLINE LAB</span>
         </div>
@@ -39,7 +40,7 @@
       <div class="workspace">
         <nav class="rail" aria-label="Primary navigation">
           <button class="rail-logo" data-view="dictate" aria-label="TypeSpeak home">
-            <span class="rail-logo-mark">ت</span>
+            <img class="rail-logo-mark" src="./assets/typespeak-icon.png" alt="" />
             <span class="rail-logo-copy"><b>TypeSpeak</b><small>LOCAL VOICE</small></span>
           </button>
           <div class="rail-actions">
@@ -82,7 +83,7 @@
           <div class="rail-bottom">
             <span class="tray-state"><i></i><span><b>Active in background</b><small>Close hides to system tray</small></span></span>
             <a class="developer-credit" href="https://nabilnet.ai" target="_blank" rel="noreferrer">Developed by <b>NABILNET.AI</b></a>
-            <span class="version">Version 0.1.0</span>
+            <span class="version">Version 0.1.3</span>
           </div>
         </nav>
 
@@ -117,7 +118,7 @@
               <label class="compact-field output-field">
                 <span id="activeOutputLabel">Output for Mixed</span>
                 <select id="outputSelect" aria-label="Output language for the selected lane">
-                  <option value="mixed">Mixed · عربي + EN</option>
+                  <option value="original">Keep Mixed · عربي + English</option>
                 </select>
               </label>
               <div class="offline-badge" id="privacyBadge" aria-label="Local connection">
@@ -442,9 +443,35 @@
                 <input type="checkbox" checked disabled aria-label="Keep TypeSpeak active in system tray" />
               </label>
               <label class="setting-row">
+                <span><b>Start TypeSpeak with Windows</b><small>Launch quietly in the system tray when you sign in, so push-to-talk is always ready.</small></span>
+                <input id="startWithWindowsToggle" type="checkbox" checked />
+              </label>
+              <label class="setting-row">
                 <span><b>Save Recent locally</b><small>Keep transcript history only on this computer. Turning this off clears saved history.</small></span>
                 <input id="saveRecentToggle" type="checkbox" checked />
               </label>
+            </section>
+            <section class="settings-group">
+              <div class="settings-group-heading"><span>TRANSLATION</span><h2>Output language</h2></div>
+              <p class="settings-group-note">
+                Choose the final writing language for each speaking mode. “Keep original” never translates your words.
+              </p>
+              <label class="setting-row setting-output-row">
+                <span><b>When speaking Arabic</b><small>Keep Arabic exactly as spoken, or translate it to English or another language.</small></span>
+                <select id="settingsOutputArabic" data-output-route="ar" aria-label="Output language when speaking Arabic"></select>
+              </label>
+              <label class="setting-row setting-output-row">
+                <span><b>When speaking Mixed</b><small>Keep Arabic and English in their original scripts, or translate the complete result.</small></span>
+                <select id="settingsOutputMixed" data-output-route="mixed" aria-label="Output language when speaking mixed Arabic and English"></select>
+              </label>
+              <label class="setting-row setting-output-row">
+                <span><b>When speaking English</b><small>Keep English exactly as spoken, or translate it to Arabic or another language.</small></span>
+                <select id="settingsOutputEnglish" data-output-route="en" aria-label="Output language when speaking English"></select>
+              </label>
+              <div class="setting-row translator-setting-row">
+                <span><b>Local translation model</b><small id="settingsTranslatorStatus">Checking the local translator…</small></span>
+                <button class="secondary-button" id="settingsInstallTranslator" type="button">Download</button>
+              </div>
             </section>
             <section class="settings-group">
               <div class="settings-group-heading"><span>VOICE MODELS</span><h2>Models & translation</h2></div>

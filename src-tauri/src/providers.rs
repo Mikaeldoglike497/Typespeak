@@ -28,6 +28,9 @@ const MODEL_CANDIDATES: [&str; 4] = [
     "ggml-small-q5_1.bin",
 ];
 const MINIMUM_MODEL_BYTES: u64 = 20 * 1024 * 1024;
+const MIXED_SILENCE_MS: usize = 280;
+const MIXED_MIN_CHUNK_MS: usize = 1_400;
+const MIXED_MAX_CHUNKS: usize = 8;
 static SESSION_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, Deserialize)]
@@ -128,12 +131,10 @@ impl WhisperRuntime {
             .transcribe(job)
     }
 
-    fn warm(&self, installation: &WhisperInstallation) -> Result<(), String> {
-        let mut active_server = self
-            .active_server
-            .lock()
-            .map_err(|_| "The local Whisper service is unavailable.".to_string())?;
-        ensure_warm_server(&mut active_server, installation)
+    pub fn shutdown(&self) {
+        if let Ok(mut active_server) = self.active_server.lock() {
+            *active_server = None;
+        }
     }
 }
 
@@ -234,19 +235,19 @@ fn whisper_server_command(executable: &Path, model: &Path, port: u16) -> Command
         .arg("--no-language-probabilities")
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    hide_server_console(&mut command);
+    hide_child_console(&mut command);
     command
 }
 
 #[cfg(windows)]
-fn hide_server_console(command: &mut Command) {
+fn hide_child_console(command: &mut Command) {
     use std::os::windows::process::CommandExt;
     use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
     command.creation_flags(CREATE_NO_WINDOW);
 }
 
 #[cfg(not(windows))]
-fn hide_server_console(_command: &mut Command) {}
+fn hide_child_console(_command: &mut Command) {}
 
 fn available_local_port() -> Result<u16, String> {
     TcpListener::bind(("127.0.0.1", 0))
@@ -421,14 +422,6 @@ pub fn statuses() -> Vec<EngineStatus> {
     ]
 }
 
-pub fn warm_whisper(runtime: &WhisperRuntime) -> Result<(), String> {
-    let installation = require_whisper_installation()?;
-    if installation.servers.is_empty() {
-        return Ok(());
-    }
-    runtime.warm(&installation)
-}
-
 fn whisper_status() -> EngineStatus {
     let catalog = model_manager::catalog_entry(WHISPER_MODEL_ID).expect("built-in catalog entry");
     let installation = find_whisper_installation();
@@ -587,9 +580,10 @@ fn endpoint_transcript(request: &EndpointTranscriptionRequest) -> Result<String,
 }
 
 fn endpoint_form(audio: Vec<u8>, model: &str, language: &str) -> Result<multipart::Form, String> {
-    let form = multipart::Form::new()
-        .text("model", model.to_owned())
-        .text("language", endpoint_language(language).to_owned());
+    let mut form = multipart::Form::new().text("model", model.to_owned());
+    if let Some(language) = endpoint_language(language) {
+        form = form.text("language", language.to_owned());
+    }
     let audio_part = multipart::Part::bytes(audio)
         .file_name("typespeak.wav")
         .mime_str("audio/wav")
@@ -651,10 +645,11 @@ fn is_loopback_url(url: &Url) -> bool {
         && matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "::1"))
 }
 
-fn endpoint_language(language: &str) -> &str {
+fn endpoint_language(language: &str) -> Option<&str> {
     match language {
-        "en" => "en",
-        _ => "ar",
+        "ar" => Some("ar"),
+        "en" => Some("en"),
+        _ => None,
     }
 }
 
@@ -784,6 +779,7 @@ fn run_crisp(
         .arg("-np")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    hide_child_console(&mut command);
     let child = command
         .spawn()
         .map_err(|error| format!("Could not start the local CrispASR engine: {error}"))?;
@@ -800,11 +796,212 @@ fn run_crisp(
 }
 
 fn run_whisper(job: &WhisperJob<'_>, runtime: &WhisperRuntime) -> Result<String, String> {
+    if job.language == "mixed" {
+        if let Some(chunks) = mixed_wav_chunks(job.audio) {
+            let mut transcripts = Vec::with_capacity(chunks.len());
+            for (audio, duration_ms) in &chunks {
+                let chunk_job = WhisperJob {
+                    installation: job.installation,
+                    audio,
+                    language: job.language,
+                    glossary: job.glossary,
+                    duration_ms: *duration_ms,
+                };
+                transcripts.push(run_whisper_once(&chunk_job, runtime)?);
+            }
+            return Ok(join_mixed_transcripts(transcripts));
+        }
+    }
+    run_whisper_once(job, runtime)
+}
+
+fn run_whisper_once(job: &WhisperJob<'_>, runtime: &WhisperRuntime) -> Result<String, String> {
     if !job.installation.servers.is_empty() {
         runtime.transcribe(job)
     } else {
         run_whisper_cli(job)
     }
+}
+
+fn join_mixed_transcripts(transcripts: Vec<String>) -> String {
+    transcripts
+        .into_iter()
+        .map(|text| text.trim().to_owned())
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn mixed_wav_chunks(audio: &[u8]) -> Option<Vec<(Vec<u8>, u64)>> {
+    let wav = Pcm16MonoWav::parse(audio)?;
+    let boundaries = mixed_silence_boundaries(&wav.samples, wav.sample_rate);
+    if boundaries.is_empty() {
+        return None;
+    }
+
+    let mut chunks = Vec::with_capacity(boundaries.len() + 1);
+    let mut start = 0;
+    for end in boundaries
+        .into_iter()
+        .chain(std::iter::once(wav.samples.len()))
+        .take(MIXED_MAX_CHUNKS)
+    {
+        if end <= start {
+            continue;
+        }
+        let samples = &wav.samples[start..end];
+        let duration_ms = (samples.len() as u64).saturating_mul(1_000) / u64::from(wav.sample_rate);
+        chunks.push((encode_pcm16_mono_wav(samples, wav.sample_rate), duration_ms));
+        start = end;
+    }
+    (chunks.len() > 1).then_some(chunks)
+}
+
+struct Pcm16MonoWav {
+    sample_rate: u32,
+    samples: Vec<i16>,
+}
+
+impl Pcm16MonoWav {
+    fn parse(audio: &[u8]) -> Option<Self> {
+        if audio.len() < 44 || audio.get(0..4)? != b"RIFF" || audio.get(8..12)? != b"WAVE" {
+            return None;
+        }
+        let mut cursor: usize = 12;
+        let mut format = None;
+        let mut data = None;
+        while cursor.checked_add(8)? <= audio.len() {
+            let id = audio.get(cursor..cursor + 4)?;
+            let size = read_wav_u32(audio, cursor + 4)? as usize;
+            let body = cursor.checked_add(8)?;
+            let end = body.checked_add(size)?;
+            if end > audio.len() {
+                return None;
+            }
+            if id == b"fmt " && size >= 16 {
+                format = Some((
+                    read_wav_u16(audio, body)?,
+                    read_wav_u16(audio, body + 2)?,
+                    read_wav_u32(audio, body + 4)?,
+                    read_wav_u16(audio, body + 14)?,
+                ));
+            } else if id == b"data" {
+                data = Some(audio.get(body..end)?);
+            }
+            cursor = end.checked_add(size % 2)?;
+        }
+        let (encoding, channels, sample_rate, bits_per_sample) = format?;
+        let data = data?;
+        if encoding != 1 || channels != 1 || sample_rate == 0 || bits_per_sample != 16 {
+            return None;
+        }
+        let samples = data
+            .chunks_exact(2)
+            .map(|bytes| i16::from_le_bytes([bytes[0], bytes[1]]))
+            .collect::<Vec<_>>();
+        (!samples.is_empty()).then_some(Self {
+            sample_rate,
+            samples,
+        })
+    }
+}
+
+fn read_wav_u16(audio: &[u8], offset: usize) -> Option<u16> {
+    let bytes: [u8; 2] = audio.get(offset..offset.checked_add(2)?)?.try_into().ok()?;
+    Some(u16::from_le_bytes(bytes))
+}
+
+fn read_wav_u32(audio: &[u8], offset: usize) -> Option<u32> {
+    let bytes: [u8; 4] = audio.get(offset..offset.checked_add(4)?)?.try_into().ok()?;
+    Some(u32::from_le_bytes(bytes))
+}
+
+fn mixed_silence_boundaries(samples: &[i16], sample_rate: u32) -> Vec<usize> {
+    let window_samples = (sample_rate as usize / 50).max(1);
+    let levels = samples
+        .chunks(window_samples)
+        .map(window_rms)
+        .collect::<Vec<_>>();
+    if levels.len() < 3 {
+        return Vec::new();
+    }
+
+    let mut sorted_levels = levels.clone();
+    sorted_levels.sort_by(|left, right| left.total_cmp(right));
+    let reference_index = (sorted_levels.len() * 9 / 10).min(sorted_levels.len() - 1);
+    let speech_reference = sorted_levels[reference_index];
+    let silence_threshold = (speech_reference * 0.12).max(180.0);
+    let minimum_silence_windows = (MIXED_SILENCE_MS / 20).max(1);
+    let minimum_chunk_samples = (sample_rate as usize).saturating_mul(MIXED_MIN_CHUNK_MS) / 1_000;
+
+    let mut boundaries = Vec::new();
+    let mut silence_start = None;
+    let mut last_boundary = 0;
+    for (index, level) in levels
+        .iter()
+        .copied()
+        .chain(std::iter::once(f32::INFINITY))
+        .enumerate()
+    {
+        if level <= silence_threshold {
+            silence_start.get_or_insert(index);
+            continue;
+        }
+        let Some(start_window) = silence_start.take() else {
+            continue;
+        };
+        let silence_windows = index.saturating_sub(start_window);
+        if silence_windows < minimum_silence_windows {
+            continue;
+        }
+        let boundary_window = start_window + silence_windows / 2;
+        let boundary = boundary_window
+            .saturating_mul(window_samples)
+            .min(samples.len());
+        let before = boundary.saturating_sub(last_boundary);
+        let after = samples.len().saturating_sub(boundary);
+        if before >= minimum_chunk_samples && after >= minimum_chunk_samples {
+            boundaries.push(boundary);
+            last_boundary = boundary;
+            if boundaries.len() + 1 >= MIXED_MAX_CHUNKS {
+                break;
+            }
+        }
+    }
+    boundaries
+}
+
+fn window_rms(samples: &[i16]) -> f32 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    let squared_sum = samples.iter().fold(0.0_f64, |sum, sample| {
+        let value = f64::from(*sample);
+        sum + value * value
+    });
+    (squared_sum / samples.len() as f64).sqrt() as f32
+}
+
+fn encode_pcm16_mono_wav(samples: &[i16], sample_rate: u32) -> Vec<u8> {
+    let data_bytes = samples.len().saturating_mul(2);
+    let riff_bytes = 36_usize.saturating_add(data_bytes).min(u32::MAX as usize) as u32;
+    let mut wav = Vec::with_capacity(44 + data_bytes);
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&riff_bytes.to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16_u32.to_le_bytes());
+    wav.extend_from_slice(&1_u16.to_le_bytes());
+    wav.extend_from_slice(&1_u16.to_le_bytes());
+    wav.extend_from_slice(&sample_rate.to_le_bytes());
+    wav.extend_from_slice(&sample_rate.saturating_mul(2).to_le_bytes());
+    wav.extend_from_slice(&2_u16.to_le_bytes());
+    wav.extend_from_slice(&16_u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&(data_bytes.min(u32::MAX as usize) as u32).to_le_bytes());
+    for sample in samples {
+        wav.extend_from_slice(&sample.to_le_bytes());
+    }
+    wav
 }
 
 fn run_whisper_cli(job: &WhisperJob<'_>) -> Result<String, String> {
@@ -862,6 +1059,7 @@ fn whisper_command(
     if !prompt.is_empty() {
         command.arg("--prompt").arg(prompt);
     }
+    hide_child_console(&mut command);
     command
 }
 
@@ -940,7 +1138,7 @@ fn inference_threads() -> usize {
 
 fn whisper_language(language: &str) -> &'static str {
     match language {
-        "ar" | "mixed" => "ar",
+        "ar" => "ar",
         "en" => "en",
         _ => "auto",
     }
@@ -948,8 +1146,8 @@ fn whisper_language(language: &str) -> &'static str {
 
 fn crisp_language(backend: &str, language: &str) -> &'static str {
     match (backend, language) {
+        (COHERE_ENGINE, "ar") => "ar",
         (COHERE_ENGINE, "en") => "en",
-        (COHERE_ENGINE, _) => "ar",
         (_, "ar") => "ar",
         (_, "en") => "en",
         _ => "auto",
@@ -966,7 +1164,7 @@ fn glossary_prompt(glossary: &[String], language: &str) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     let context = match language {
-        "mixed" => "كيفك today؟ خلّينا نكمّل بالـTypeSpeak. هيدا حديث لبناني mixed بالعربي وEnglish.",
+        "mixed" => "مرحبا، today عندي meeting مع the team. خلّينا نكمّل الـproject على TypeSpeak, وبعدين منعمل final review. English words stay in Latin script.",
         "ar" => "هيدا حديث لبناني مكتوب بالحروف العربية.",
         "en" => "Lebanese-accented English conversation.",
         _ => "Lebanese Arabic and English conversation.",
@@ -1182,6 +1380,7 @@ pub fn translate(
         .arg("-np")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    hide_child_console(&mut command);
     let child = command
         .spawn()
         .map_err(|error| format!("Could not start the local translator: {error}"))?;
@@ -1240,18 +1439,24 @@ fn format_bytes(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        endpoint_language, endpoint_text, glossary_prompt, inference_timeout, validate_endpoint,
-        whisper_command, whisper_language, EndpointConnection, SessionFiles, WhisperInstallation,
+        encode_pcm16_mono_wav, endpoint_language, endpoint_text, glossary_prompt,
+        inference_timeout, mixed_wav_chunks, validate_endpoint, whisper_command, whisper_language,
+        EndpointConnection, SessionFiles, WhisperInstallation,
     };
     use std::path::PathBuf;
     use std::time::Duration;
 
     #[test]
-    fn whisper_mixed_regression_preserves_arabic_script() {
-        assert_eq!(whisper_language("mixed"), "ar");
+    fn whisper_mixed_route_uses_automatic_language_detection() {
+        assert_eq!(whisper_language("mixed"), "auto");
         assert_eq!(whisper_language("ar"), "ar");
         assert_eq!(whisper_language("en"), "en");
         assert_eq!(whisper_language("unknown"), "auto");
+    }
+
+    #[test]
+    fn shutting_down_an_idle_whisper_runtime_is_safe() {
+        super::WhisperRuntime::default().shutdown();
     }
 
     #[test]
@@ -1260,10 +1465,37 @@ mod tests {
             &["TypeSpeak".into(), "بيروت".into(), "  NABILNET  ".into()],
             "mixed",
         );
-        assert!(prompt.contains("كيفك today؟"));
+        assert!(prompt.contains("today عندي meeting"));
         assert!(prompt.contains("TypeSpeak"));
         assert!(prompt.contains("بيروت"));
         assert!(prompt.contains("NABILNET"));
+    }
+
+    #[test]
+    fn mixed_audio_is_split_only_at_a_sustained_silence() {
+        let sample_rate = 16_000;
+        let tone = vec![4_000_i16; sample_rate * 2];
+        let silence = vec![0_i16; sample_rate / 2];
+        let mut samples = tone.clone();
+        samples.extend_from_slice(&silence);
+        samples.extend_from_slice(&tone);
+        let wav = encode_pcm16_mono_wav(&samples, sample_rate as u32);
+
+        let chunks = mixed_wav_chunks(&wav).expect("a safe mixed-language boundary");
+
+        assert_eq!(chunks.len(), 2);
+        assert!(chunks.iter().all(|(audio, duration)| {
+            audio.starts_with(b"RIFF") && *duration >= 1_900 && *duration <= 2_600
+        }));
+    }
+
+    #[test]
+    fn continuous_speech_is_not_split_mid_word() {
+        let sample_rate = 16_000;
+        let samples = vec![3_000_i16; sample_rate * 5];
+        let wav = encode_pcm16_mono_wav(&samples, sample_rate as u32);
+
+        assert!(mixed_wav_chunks(&wav).is_none());
     }
 
     #[test]
@@ -1281,7 +1513,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(arguments
             .windows(2)
-            .any(|pair| pair[0] == "-l" && pair[1] == "ar"));
+            .any(|pair| pair[0] == "-l" && pair[1] == "auto"));
         assert!(!arguments.iter().any(|argument| argument == "-tr"));
     }
 
@@ -1292,10 +1524,10 @@ mod tests {
     }
 
     #[test]
-    fn mixed_endpoint_route_uses_arabic_as_predominant_language() {
-        assert_eq!(endpoint_language("mixed"), "ar");
-        assert_eq!(endpoint_language("ar"), "ar");
-        assert_eq!(endpoint_language("en"), "en");
+    fn mixed_endpoint_route_lets_the_model_detect_the_language() {
+        assert_eq!(endpoint_language("mixed"), None);
+        assert_eq!(endpoint_language("ar"), Some("ar"));
+        assert_eq!(endpoint_language("en"), Some("en"));
     }
 
     #[test]

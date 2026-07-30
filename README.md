@@ -17,9 +17,9 @@ Each route stores two independent choices: its speech model and its output langu
 - Mixed → Cohere Transcribe Arabic local.
 - Arabic output → English.
 - English output → English.
-- Mixed output → Mixed · عربي + EN.
+- Mixed output → Keep Mixed · عربي + English.
 
-Changing one route does not change the other two. `Mixed · عربي + EN` means TypeSpeak does not run translation and asks the selected speech model to retain both scripts. Arabic-to-Arabic and English-to-English also bypass translation. Selecting a different target language uses the local M2M100 translator; selecting it for the first time offers the one-time model download.
+Changing one route does not change the other two. `Keep original` never translates the transcript: Arabic stays Arabic, English stays English, and Mixed retains both scripts. Choosing Arabic, English, or another target explicitly uses the local M2M100 translator when the source differs. The three output routes and the one-time translator download are available directly on the Settings page.
 
 Supported connection types:
 
@@ -121,8 +121,8 @@ The network is only needed for the one-time model installations. Dictation and t
 
 The production build bundles the CPU and NVIDIA CUDA runtimes, but **no speech-model weights**. Install either artifact like a normal Windows app:
 
-- `TypeSpeak_0.1.0_x64-setup.exe` — recommended per-user installer. It asks whether to download the 574 MB default Whisper model now. Choosing **Yes** opens TypeSpeak and displays the download progress; choosing **No** keeps the installer lightweight and leaves a **Download** button beside Whisper inside the app.
-- `TypeSpeak_0.1.0_x64_en-US.msi` — Windows Installer package for managed deployment. It includes no speech models; use the in-app **Download** button after deployment.
+- `TypeSpeak_0.1.3_x64-setup.exe` — recommended per-user installer. It asks whether to download the 574 MB default Whisper model now. Choosing **Yes** opens TypeSpeak and displays the download progress; choosing **No** keeps the installer lightweight and leaves a **Download** button beside Whisper inside the app.
+- `TypeSpeak_0.1.3_x64_en-US.msi` — Windows Installer package for managed deployment. It includes no speech models; use the in-app **Download** button after deployment.
 
 Closing the window hides TypeSpeak in the Windows system tray and keeps the global shortcut active. Use the tray menu to open Dictate, Recent, or Settings, or choose **Quit TypeSpeak** to stop it completely.
 
@@ -186,7 +186,7 @@ after Windows registers it successfully.
 TypeSpeak starts warming the local Whisper model after launch. The first run can
 still wait for warm-up to finish; later runs reuse the loaded model.
 
-For Whisper, `Mixed` is intentionally Arabic-first. TypeSpeak sends the Arabic language token, a bilingual script prompt, and no Whisper translate flag. Whisper can still mishandle code-switching; Cohere Arabic is the stronger Mixed candidate. Use the separate output selector when translation is actually wanted.
+For Whisper, `Mixed` uses automatic language detection and never enables Whisper's translation mode. When a recording contains a safe pause, TypeSpeak splits it at the silence and detects each speech segment independently while keeping the model warm. This improves Arabic-English switches without cutting through continuous speech. Whisper can still mishandle within-word or no-pause code-switching, so a Lebanese benchmark remains necessary before claiming a particular model is universally accurate. Use the separate output selector only when translation is actually wanted.
 
 ## Test
 

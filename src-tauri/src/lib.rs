@@ -4,7 +4,7 @@ mod providers;
 use arboard::Clipboard;
 use model_manager::{CustomModelInstallRequest, ManagedModelStatus};
 use providers::{
-    transcribe, transcribe_custom_model, transcribe_endpoint, translate, warm_whisper,
+    transcribe, transcribe_custom_model, transcribe_endpoint, translate,
     CustomTranscriptionRequest, EndpointTranscriptionRequest, EngineStatus, TranscriptionRequest,
     TranscriptionResult, WhisperRuntime,
 };
@@ -22,10 +22,12 @@ use tauri::{
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewWindow, WindowEvent,
 };
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 const PUSH_TO_TALK_HOLD_MS: u64 = 280;
 const DEFAULT_MODEL_DOWNLOAD_ARGUMENT: &str = "--download-default-model";
+const WINDOWS_STARTUP_ARGUMENT: &str = "--windows-startup";
 
 #[derive(Default)]
 struct TargetWindow(Arc<Mutex<isize>>);
@@ -125,6 +127,27 @@ fn managed_model_status(model_id: String) -> Result<ManagedModelStatus, String> 
 #[tauri::command]
 fn default_model_download_requested() -> bool {
     std::env::args().any(|argument| argument == DEFAULT_MODEL_DOWNLOAD_ARGUMENT)
+}
+
+#[tauri::command]
+fn startup_enabled(app: AppHandle) -> Result<bool, String> {
+    app.autolaunch()
+        .is_enabled()
+        .map_err(|error| format!("Could not read the Windows startup setting: {error}"))
+}
+
+#[tauri::command]
+fn set_startup_enabled(enabled: bool, app: AppHandle) -> Result<(), String> {
+    let manager = app.autolaunch();
+    if enabled {
+        manager
+            .enable()
+            .map_err(|error| format!("Could not enable Windows startup: {error}"))
+    } else {
+        manager
+            .disable()
+            .map_err(|error| format!("Could not disable Windows startup: {error}"))
+    }
 }
 
 #[tauri::command]
@@ -645,9 +668,14 @@ fn setup_application(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     let overlay = app
         .get_webview_window("recording-overlay")
         .ok_or_else(|| std::io::Error::other("TypeSpeak recording overlay was not created"))?;
-    window.show()?;
-    window.center()?;
-    window.set_focus()?;
+    if let Some(icon) = app.default_window_icon() {
+        window.set_icon(icon.clone())?;
+    }
+    if !launched_from_windows_startup() {
+        window.show()?;
+        window.center()?;
+        window.set_focus()?;
+    }
     minimize_to_tray_when_main_window_closes(&window);
     overlay.set_focusable(false)?;
     overlay.set_ignore_cursor_events(true)?;
@@ -655,7 +683,6 @@ fn setup_application(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     println!("TypeSpeak main window is ready.");
     install_push_to_talk(app)?;
     install_system_tray(app)?;
-    warm_whisper_after_launch(app);
     Ok(())
 }
 
@@ -723,7 +750,10 @@ fn install_system_tray(app: &tauri::App) -> Result<(), Box<dyn Error>> {
                     eprintln!("TypeSpeak could not open Settings from the tray: {error}");
                 }
             }
-            "quit" => app.exit(0),
+            "quit" => {
+                app.state::<WhisperRuntime>().shutdown();
+                app.exit(0);
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -749,15 +779,6 @@ fn install_system_tray(app: &tauri::App) -> Result<(), Box<dyn Error>> {
     }
     tray.build(app)?;
     Ok(())
-}
-
-fn warm_whisper_after_launch(app: &tauri::App) {
-    let whisper_runtime = app.state::<WhisperRuntime>().inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        if let Err(error) = warm_whisper(&whisper_runtime) {
-            eprintln!("TypeSpeak could not warm the Whisper model: {error}");
-        }
-    });
 }
 
 #[cfg(desktop)]
@@ -993,6 +1014,10 @@ fn bottom_center_position(
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            Some(vec![WINDOWS_STARTUP_ARGUMENT]),
+        ))
         .manage(TargetWindow::default())
         .manage(PushToTalkShortcut::default())
         .manage(WhisperRuntime::default())
@@ -1001,6 +1026,8 @@ pub fn run() {
             engine_status,
             managed_model_status,
             default_model_download_requested,
+            startup_enabled,
+            set_startup_enabled,
             custom_model_status,
             install_managed_model,
             install_custom_model,
@@ -1019,11 +1046,25 @@ pub fn run() {
         .expect("error while running TypeSpeak");
 }
 
+fn launched_from_windows_startup() -> bool {
+    has_windows_startup_argument(std::env::args())
+}
+
+fn has_windows_startup_argument<I, S>(arguments: I) -> bool
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    arguments
+        .into_iter()
+        .any(|argument| argument.as_ref() == WINDOWS_STARTUP_ARGUMENT)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        bottom_center_position, normalize_transcript, parse_push_to_talk_shortcut, HoldRelease,
-        HoldTracker, MonitorArea,
+        bottom_center_position, has_windows_startup_argument, normalize_transcript,
+        parse_push_to_talk_shortcut, HoldRelease, HoldTracker, MonitorArea,
     };
     use tauri::{PhysicalPosition, PhysicalSize};
 
@@ -1047,6 +1088,18 @@ mod tests {
         assert!(parse_push_to_talk_shortcut("KeyM").is_ok());
         assert!(parse_push_to_talk_shortcut("Insert").is_ok());
         assert!(parse_push_to_talk_shortcut("PrintScreen").is_ok());
+    }
+
+    #[test]
+    fn windows_startup_launches_are_detected_without_matching_unrelated_arguments() {
+        assert!(has_windows_startup_argument([
+            "typespeak.exe",
+            "--windows-startup"
+        ]));
+        assert!(!has_windows_startup_argument([
+            "typespeak.exe",
+            "--download-default-model"
+        ]));
     }
 
     #[test]
